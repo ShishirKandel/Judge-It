@@ -273,14 +273,24 @@ class _SwipeScreenState extends State<SwipeScreen> {
     SwiperActivity activity,
   ) {
     if (activity is Swipe) {
-      final isRightSwipe = activity.direction == AxisDirection.right;
-
       setState(() {
         _currentIndex = targetIndex;
         _swipeProgress = 0.0;
       });
 
-      context.read<SwipeProvider>().onSwipe(previousIndex, isRightSwipe);
+      final direction = activity.direction;
+      
+      if (direction == AxisDirection.up) {
+        // Swipe up = Skip
+        context.read<SwipeProvider>().onSkip(previousIndex);
+      } else if (direction == AxisDirection.right) {
+        // Swipe right = NTA
+        context.read<SwipeProvider>().onSwipe(previousIndex, true);
+      } else if (direction == AxisDirection.left) {
+        // Swipe left = YTA
+        context.read<SwipeProvider>().onSwipe(previousIndex, false);
+      }
+      // Swipe down is ignored (could be accidental)
     }
   }
 }

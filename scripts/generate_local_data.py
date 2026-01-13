@@ -1,11 +1,11 @@
 """
 Generate Local JSON Data for Judge It App
 ==========================================
-Creates a bundled JSON file with stories for offline/fallback use.
+Creates a bundled JSON file with high-engagement stories for offline/fallback use.
 
 Usage:
   python generate_local_data.py
-  python generate_local_data.py --limit 3000
+  python generate_local_data.py --limit 3000 --min-score 5000
 
 Requirements:
   - pip install datasets
@@ -19,6 +19,9 @@ import sys
 
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), '..', 'assets', 'data', 'stories.json')
 DATASET_NAME = "MattBoraske/reddit-AITA-submissions-and-comments-multiclass"
+
+# Default minimum score for "interesting" stories
+DEFAULT_MIN_SCORE = 5000
 
 
 def generate_votes_from_score(score: int) -> tuple[int, int]:
@@ -37,7 +40,7 @@ def generate_votes_from_score(score: int) -> tuple[int, int]:
         else:
             yes_votes = random.randint(30, 100)
             no_votes = random.randint(400, 700)
-    elif score > 1000:
+    else:  # score > 5000 (our minimum)
         ratio = random.random()
         if ratio > 0.6:
             yes_votes = random.randint(300, 600)
@@ -49,10 +52,6 @@ def generate_votes_from_score(score: int) -> tuple[int, int]:
             base = random.randint(150, 250)
             yes_votes = base + random.randint(-30, 30)
             no_votes = base + random.randint(-30, 30)
-    else:
-        base = random.randint(100, 300)
-        yes_votes = base + random.randint(-50, 50)
-        no_votes = random.randint(50, 200)
     
     return max(10, yes_votes), max(10, no_votes)
 
@@ -64,8 +63,14 @@ def generate_id() -> str:
     return ''.join(random.choice(chars) for _ in range(20))
 
 
-def load_and_process_data(limit: int = 3000) -> list[dict]:
-    """Load stories from HuggingFace and process for local storage."""
+def load_and_process_data(limit: int = 3000, min_score: int = DEFAULT_MIN_SCORE) -> list[dict]:
+    """
+    Load high-engagement stories from HuggingFace and process for local storage.
+    
+    Args:
+        limit: Maximum number of stories to include
+        min_score: Minimum Reddit score for a story to be included
+    """
     try:
         from datasets import load_dataset
     except ImportError:
@@ -77,12 +82,25 @@ def load_and_process_data(limit: int = 3000) -> list[dict]:
     dataset = load_dataset(DATASET_NAME, split="train")
     
     print(f"Dataset loaded: {len(dataset)} total rows")
+    print(f"Filtering for stories with score >= {min_score}...")
     
-    if limit and limit < len(dataset):
-        dataset = dataset.shuffle(seed=42).select(range(limit))
+    # Filter for high-engagement stories first
+    high_engagement = []
+    for row in dataset:
+        score = row.get('submission_score', 0) or 0
+        if score >= min_score:
+            high_engagement.append(row)
+    
+    print(f"Found {len(high_engagement)} high-engagement stories")
+    
+    # Shuffle and limit
+    random.seed(42)
+    random.shuffle(high_engagement)
+    if limit and len(high_engagement) > limit:
+        high_engagement = high_engagement[:limit]
     
     stories = []
-    for row in dataset:
+    for row in high_engagement:
         title = row.get('submission_title', '') or ''
         text = row.get('submission_text', '') or ''
         score = row.get('submission_score', 0) or 0
@@ -109,17 +127,21 @@ def load_and_process_data(limit: int = 3000) -> list[dict]:
 def main():
     parser = argparse.ArgumentParser(description='Generate local JSON data for offline use')
     parser.add_argument('--limit', type=int, default=3000,
-                        help='Number of stories to include (default: 3000)')
+                        help='Max number of stories to include (default: 3000)')
+    parser.add_argument('--min-score', type=int, default=DEFAULT_MIN_SCORE,
+                        help=f'Minimum Reddit score for stories (default: {DEFAULT_MIN_SCORE})')
     
     args = parser.parse_args()
     
     print("=" * 50)
-    print("Judge It - Local Data Generator")
+    print("Judge It - Local Data Generator (High Engagement)")
     print("=" * 50)
+    print(f"Min score filter: {args.min_score}")
+    print(f"Max stories: {args.limit}")
     
     # Load and process data
-    stories = load_and_process_data(args.limit)
-    print(f"Processed {len(stories)} valid stories")
+    stories = load_and_process_data(args.limit, args.min_score)
+    print(f"Processed {len(stories)} valid high-engagement stories")
     
     # Ensure output directory exists
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)

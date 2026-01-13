@@ -113,6 +113,29 @@ class SwipeProvider extends ChangeNotifier {
     }
   }
 
+  /// Handle skip action (swipe up)
+  /// 
+  /// [storyIndex] - Index of the skipped story
+  void onSkip(int storyIndex) {
+    if (storyIndex >= _stories.length) return;
+
+    // Don't show result, just move to next card
+    _swipeCount++;  // Still counts towards ad interval
+    
+    // Check for ad on skip too
+    if (_swipeCount % _adInterval == 0) {
+      _adService.showInterstitialAd();
+    }
+
+    // Pre-fetch more stories if running low
+    final remainingCards = _stories.length - storyIndex - 1;
+    if (remainingCards <= _prefetchThreshold && _hasMore) {
+      fetchMoreStories();
+    }
+    
+    notifyListeners();
+  }
+
   /// Dismiss the result overlay
   void dismissResult() {
     _showingResult = false;
