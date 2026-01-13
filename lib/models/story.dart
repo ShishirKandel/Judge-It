@@ -40,6 +40,17 @@ class Story {
     );
   }
 
+  /// Create a Story from JSON (for local bundled data)
+  factory Story.fromJson(Map<String, dynamic> json) {
+    return Story(
+      id: json['id'] ?? '',
+      title: json['title'] ?? 'Untitled',
+      body: json['body'] ?? '',
+      yesVotes: json['yes_votes'] ?? 0,
+      noVotes: json['no_votes'] ?? 0,
+    );
+  }
+
   /// Convert Story to a Map for Firestore
   Map<String, dynamic> toFirestore() {
     return {

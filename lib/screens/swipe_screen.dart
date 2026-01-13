@@ -4,9 +4,10 @@ import 'package:appinio_swiper/appinio_swiper.dart';
 import '../providers/swipe_provider.dart';
 import '../widgets/story_card.dart';
 import '../widgets/result_overlay.dart';
+import '../theme/app_colors.dart';
 
 /// Main swipe screen for judging stories.
-/// 
+///
 /// Uses AppinioSwiper for card swiping with infinite scroll.
 class SwipeScreen extends StatefulWidget {
   const SwipeScreen({super.key});
@@ -20,12 +21,14 @@ class _SwipeScreenState extends State<SwipeScreen> {
   int _currentIndex = 0;
   double _swipeProgress = 0.0;
 
+  /// Divisor for converting swipe offset to progress (-1.0 to 1.0)
+  static const double _swipeProgressDivisor = 200.0;
+
   @override
   void initState() {
     super.initState();
     _swiperController = AppinioSwiperController();
-    
-    // Initialize provider and fetch stories
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SwipeProvider>().initialize();
     });
@@ -40,11 +43,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
       body: Consumer<SwipeProvider>(
         builder: (context, provider, child) {
-          // Show result overlay if needed
           if (provider.showingResult) {
             return Stack(
               children: [
@@ -75,12 +77,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E2E),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.gavel_rounded,
-              color: Colors.amber,
+              color: AppColors.primary,
               size: 24,
             ),
           ),
@@ -88,7 +90,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
           const Text(
             'Judge It',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.textPrimary,
               fontSize: 24,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
@@ -103,21 +105,21 @@ class _SwipeScreenState extends State<SwipeScreen> {
               margin: const EdgeInsets.only(right: 16),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E2E),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 children: [
                   const Icon(
                     Icons.swipe_rounded,
-                    color: Colors.white54,
+                    color: AppColors.textMuted,
                     size: 18,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '${provider.swipeCount}',
                     style: const TextStyle(
-                      color: Colors.white70,
+                      color: AppColors.textSecondary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -131,129 +133,115 @@ class _SwipeScreenState extends State<SwipeScreen> {
   }
 
   Widget _buildSwiperContent(SwipeProvider provider) {
-    // Loading state
     if (provider.isLoading && provider.stories.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: Colors.amber,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Loading stories...',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildLoadingState();
     }
 
-    // Error state
     if (provider.error != null && provider.stories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: Colors.red,
-              size: 64,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load stories',
-              style: TextStyle(
-                color: Colors.white.withAlpha(204), // 0.8 opacity
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              provider.error!,
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => provider.reset(),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amber,
-                foregroundColor: Colors.black,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildErrorState(provider);
     }
 
-    // Empty state
     if (provider.stories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.inbox_rounded,
-              color: Colors.white.withAlpha(77), // 0.3 opacity
-              size: 80,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No stories to judge',
-              style: TextStyle(
-                color: Colors.white.withAlpha(153), // 0.6 opacity
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState();
     }
 
-    // No more cards
     if (_currentIndex >= provider.stories.length && !provider.hasMore) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.check_circle_outline_rounded,
-              color: Colors.green,
-              size: 80,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "You've judged all stories!",
-              style: TextStyle(
-                color: Colors.white.withAlpha(204), // 0.8 opacity
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Come back later for more',
-              style: TextStyle(
-                color: Colors.white.withAlpha(128), // 0.5 opacity
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildCompletedState();
     }
 
-    // Swiper content
+    return _buildSwiper(provider);
+  }
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: AppColors.primary),
+          SizedBox(height: 16),
+          Text(
+            'Loading stories...',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(SwipeProvider provider) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline_rounded, color: AppColors.yta, size: 64),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load stories',
+            style: TextStyle(color: AppColors.white80, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            provider.error!,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => provider.reset(),
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Retry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.black,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inbox_rounded, color: AppColors.white30, size: 80),
+          const SizedBox(height: 16),
+          Text(
+            'No stories to judge',
+            style: TextStyle(color: AppColors.white60, fontSize: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompletedState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.check_circle_outline_rounded, color: AppColors.nta, size: 80),
+          const SizedBox(height: 16),
+          Text(
+            "You've judged all stories!",
+            style: TextStyle(
+              color: AppColors.white80,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Come back later for more',
+            style: TextStyle(color: AppColors.white50, fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwiper(SwipeProvider provider) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: AppinioSwiper(
@@ -262,14 +250,14 @@ class _SwipeScreenState extends State<SwipeScreen> {
         onSwipeEnd: _onSwipeEnd,
         onCardPositionChanged: (position) {
           setState(() {
-            _swipeProgress = position.offset.dx / 200;
+            _swipeProgress = position.offset.dx / _swipeProgressDivisor;
           });
         },
         cardBuilder: (context, index) {
           if (index >= provider.stories.length) {
             return const SizedBox.shrink();
           }
-          
+
           return StoryCard(
             story: provider.stories[index],
             swipeProgress: index == _currentIndex ? _swipeProgress : 0.0,
@@ -286,12 +274,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
   ) {
     if (activity is Swipe) {
       final isRightSwipe = activity.direction == AxisDirection.right;
-      
+
       setState(() {
         _currentIndex = targetIndex;
         _swipeProgress = 0.0;
       });
-      
+
       context.read<SwipeProvider>().onSwipe(previousIndex, isRightSwipe);
     }
   }

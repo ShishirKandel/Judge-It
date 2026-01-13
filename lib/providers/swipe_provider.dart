@@ -1,7 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/story.dart';
-import '../services/firestore_service.dart';
+import '../repositories/story_repository.dart';
 import '../services/ad_service.dart';
 
 /// Vote type enum for clarity
@@ -10,13 +9,13 @@ enum VoteType { nta, yta }
 /// State provider for the swipe screen.
 /// 
 /// Manages story fetching, pagination, voting, swipe counting, and ad logic.
+/// Uses StoryRepository for seamless Firebase/offline switching.
 class SwipeProvider extends ChangeNotifier {
-  final FirestoreService _firestoreService = FirestoreService();
+  final StoryRepository _repository = StoryRepository();
   final AdService _adService = AdService();
 
   // Story management
   final List<Story> _stories = [];
-  DocumentSnapshot? _lastDocument;
   bool _isLoading = false;
   bool _hasMore = true;
   String? _error;
@@ -39,6 +38,10 @@ class SwipeProvider extends ChangeNotifier {
   Story? get lastVotedStory => _lastVotedStory;
   VoteType? get lastVoteType => _lastVoteType;
   bool get showingResult => _showingResult;
+  
+  /// Whether using local data (for UI indicator)
+  bool get isOfflineMode => _repository.isUsingLocalData;
+  DataSource get dataSource => _repository.currentSource;
 
   /// Number of stories per fetch batch
   static const int _batchSize = 5;
@@ -51,7 +54,7 @@ class SwipeProvider extends ChangeNotifier {
     await fetchMoreStories();
   }
 
-  /// Fetch more stories from Firestore
+  /// Fetch more stories (automatically handles Firebase/offline switching)
   Future<void> fetchMoreStories() async {
     if (_isLoading || !_hasMore) return;
 
@@ -60,16 +63,12 @@ class SwipeProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _firestoreService.fetchStories(
-        limit: _batchSize,
-        lastDocument: _lastDocument,
-      );
+      final newStories = await _repository.fetchStories(limit: _batchSize);
 
-      if (result.stories.isEmpty) {
-        _hasMore = false;
+      if (newStories.isEmpty) {
+        _hasMore = await _repository.hasMore;
       } else {
-        _stories.addAll(result.stories);
-        _lastDocument = result.lastDoc;
+        _stories.addAll(newStories);
       }
     } catch (e) {
       _error = 'Failed to load stories: $e';
@@ -102,8 +101,8 @@ class SwipeProvider extends ChangeNotifier {
       _adService.showInterstitialAd();
     }
 
-    // Update Firestore in background (fire and forget)
-    _firestoreService.incrementVote(story.id, isRightSwipe).catchError((e) {
+    // Update vote in repository (handles Firebase/offline automatically)
+    _repository.incrementVote(story.id, isRightSwipe).catchError((e) {
       debugPrint('Failed to record vote: $e');
     });
 
@@ -134,12 +133,18 @@ class SwipeProvider extends ChangeNotifier {
   /// Reset state (for pull-to-refresh or retry)
   Future<void> reset() async {
     _stories.clear();
-    _lastDocument = null;
     _hasMore = true;
     _error = null;
     _swipeCount = 0;
     _showingResult = false;
+    _repository.reset();
     notifyListeners();
     await fetchMoreStories();
+  }
+
+  /// Force retry Firebase connection
+  Future<void> retryOnline() async {
+    _repository.retryFirebase();
+    await reset();
   }
 }

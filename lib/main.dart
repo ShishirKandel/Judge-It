@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'providers/swipe_provider.dart';
 import 'screens/swipe_screen.dart';
+import 'theme/app_colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,11 +27,11 @@ class JudgeItApp extends StatelessWidget {
           useMaterial3: true,
           brightness: Brightness.dark,
           colorScheme: ColorScheme.dark(
-            primary: Colors.amber,
-            secondary: Colors.amberAccent,
-            surface: const Color(0xFF1E1E2E),
+            primary: AppColors.primary,
+            secondary: AppColors.primaryAccent,
+            surface: AppColors.surface,
           ),
-          scaffoldBackgroundColor: const Color(0xFF0D0D14),
+          scaffoldBackgroundColor: AppColors.background,
           appBarTheme: const AppBarTheme(
             backgroundColor: Colors.transparent,
             elevation: 0,

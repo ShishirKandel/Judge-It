@@ -1,2 +1,3 @@
 firebase-admin
-pandas
+datasets
+huggingface_hub

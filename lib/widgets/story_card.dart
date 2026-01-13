@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/story.dart';
+import '../theme/app_colors.dart';
 
 /// Card widget displaying a story for swiping.
-/// 
+///
 /// Shows title and body text. Swipe indicators appear during drag.
 class StoryCard extends StatelessWidget {
   final Story story;
@@ -22,15 +23,12 @@ class StoryCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E1E2E),
-            Color(0xFF2D2D44),
-          ],
+          colors: [AppColors.surface, AppColors.surfaceLight],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(77), // 0.3 opacity
+            color: AppColors.black30,
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -42,40 +40,36 @@ class StoryCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Main content
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title
                 Text(
                   story.title,
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     height: 1.3,
                   ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
-                // Divider
                 Container(
                   height: 1,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
                         Colors.transparent,
-                        Colors.white.withAlpha(77), // 0.3 opacity
+                        AppColors.white30,
                         Colors.transparent,
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Body text - scrollable
                 Expanded(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
@@ -83,19 +77,17 @@ class StoryCard extends StatelessWidget {
                       story.body,
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.white.withAlpha(230), // 0.9 opacity
+                        color: AppColors.white90,
                         height: 1.6,
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Swipe hints at bottom
                 _buildSwipeHints(),
               ],
             ),
           ),
-          // Swipe direction indicators
           if (swipeProgress != 0) _buildSwipeIndicator(),
         ],
       ),
@@ -105,44 +97,43 @@ class StoryCard extends StatelessWidget {
   Color _getBorderColor() {
     if (swipeProgress > 0.1) {
       final alpha = (swipeProgress.clamp(0.0, 1.0) * 255).round();
-      return Colors.green.withAlpha(alpha);
+      return AppColors.nta.withAlpha(alpha);
     } else if (swipeProgress < -0.1) {
       final alpha = ((-swipeProgress).clamp(0.0, 1.0) * 255).round();
-      return Colors.red.withAlpha(alpha);
+      return AppColors.yta.withAlpha(alpha);
     }
-    return Colors.white.withAlpha(26); // 0.1 opacity
+    return AppColors.white10;
   }
 
   Widget _buildSwipeHints() {
+    final hintAlpha = (0.6 * 255).round();
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Left hint
         Row(
           children: [
             Icon(
               Icons.arrow_back_rounded,
-              color: Colors.red.withAlpha(153), // 0.6 opacity
+              color: AppColors.yta.withAlpha(hintAlpha),
               size: 20,
             ),
             const SizedBox(width: 4),
             Text(
               'YTA',
               style: TextStyle(
-                color: Colors.red.withAlpha(153), // 0.6 opacity
+                color: AppColors.yta.withAlpha(hintAlpha),
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
             ),
           ],
         ),
-        // Right hint
         Row(
           children: [
             Text(
               'NTA',
               style: TextStyle(
-                color: Colors.green.withAlpha(153), // 0.6 opacity
+                color: AppColors.nta.withAlpha(hintAlpha),
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
@@ -150,7 +141,7 @@ class StoryCard extends StatelessWidget {
             const SizedBox(width: 4),
             Icon(
               Icons.arrow_forward_rounded,
-              color: Colors.green.withAlpha(153), // 0.6 opacity
+              color: AppColors.nta.withAlpha(hintAlpha),
               size: 20,
             ),
           ],
@@ -162,7 +153,8 @@ class StoryCard extends StatelessWidget {
   Widget _buildSwipeIndicator() {
     final isRight = swipeProgress > 0;
     final alpha = (swipeProgress.abs().clamp(0.0, 1.0) * 255).round();
-    
+    final color = isRight ? AppColors.nta : AppColors.yta;
+
     return Positioned(
       top: 20,
       left: isRight ? null : 20,
@@ -172,17 +164,17 @@ class StoryCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: (isRight ? Colors.green : Colors.red).withAlpha((alpha * 0.9).round()),
+            color: color.withAlpha((alpha * 0.9).round()),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.white.withAlpha(128), // 0.5 opacity
+              color: AppColors.white50,
               width: 2,
             ),
           ),
           child: Text(
             isRight ? 'NTA' : 'YTA',
             style: TextStyle(
-              color: Colors.white.withAlpha(alpha),
+              color: AppColors.textPrimary.withAlpha(alpha),
               fontWeight: FontWeight.bold,
               fontSize: 24,
             ),

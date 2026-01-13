@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase secrets (NEVER commit these!)
+**/serviceAccountKey.json
+**/google-services.json
+**/GoogleService-Info.plist
+firebase_app_id_file.json
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
