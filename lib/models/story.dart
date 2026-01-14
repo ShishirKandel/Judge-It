@@ -10,6 +10,7 @@ class Story {
   final String body;
   final int yesVotes;
   final int noVotes;
+  final String? topComment;  // Top comment from Reddit thread
 
   Story({
     required this.id,
@@ -17,6 +18,7 @@ class Story {
     required this.body,
     required this.yesVotes,
     required this.noVotes,
+    this.topComment,
   });
 
   /// Total votes for this story
@@ -28,6 +30,9 @@ class Story {
   /// Percentage of "You're the A**hole" votes (0.0 to 1.0)
   double get ytaPercentage => totalVotes > 0 ? noVotes / totalVotes : 0.5;
 
+  /// Whether this story has a top comment
+  bool get hasTopComment => topComment != null && topComment!.isNotEmpty;
+
   /// Create a Story from a Firestore document
   factory Story.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -37,6 +42,7 @@ class Story {
       body: data['body'] ?? '',
       yesVotes: data['yes_votes'] ?? 0,
       noVotes: data['no_votes'] ?? 0,
+      topComment: data['top_comment'],
     );
   }
 
@@ -48,6 +54,7 @@ class Story {
       body: json['body'] ?? '',
       yesVotes: json['yes_votes'] ?? 0,
       noVotes: json['no_votes'] ?? 0,
+      topComment: json['top_comment'],
     );
   }
 
@@ -59,6 +66,7 @@ class Story {
       'body': body,
       'yes_votes': yesVotes,
       'no_votes': noVotes,
+      if (topComment != null) 'top_comment': topComment,
     };
   }
 
@@ -70,6 +78,7 @@ class Story {
       body: body,
       yesVotes: isYesVote ? yesVotes + 1 : yesVotes,
       noVotes: isYesVote ? noVotes : noVotes + 1,
+      topComment: topComment,
     );
   }
 }

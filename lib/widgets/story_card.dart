@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/story.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 
 /// Card widget displaying a story for swiping.
 ///
@@ -17,24 +17,44 @@ class StoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.surface, AppColors.surfaceLight],
+          colors: isDark
+              ? [
+                  colorScheme.surfaceContainerLow,
+                  colorScheme.surfaceContainerHigh,
+                ]
+              : [
+                  colorScheme.surfaceContainerLowest,
+                  colorScheme.surfaceContainerLow,
+                ],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.black30,
+            color: isDark
+                ? Colors.black.withAlpha(100)
+                : colorScheme.shadow.withAlpha(40),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
+          if (!isDark)
+            BoxShadow(
+              color: colorScheme.primary.withAlpha(10),
+              blurRadius: 40,
+              offset: const Offset(0, 5),
+            ),
         ],
         border: Border.all(
-          color: _getBorderColor(),
+          color: _getBorderColor(colorScheme, isDark),
           width: 2,
         ),
       ),
@@ -47,14 +67,10 @@ class StoryCard extends StatelessWidget {
               children: [
                 Text(
                   story.title,
-                  style: const TextStyle(
-                    fontSize: 22,
+                  style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
                     height: 1.3,
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -63,7 +79,7 @@ class StoryCard extends StatelessWidget {
                     gradient: LinearGradient(
                       colors: [
                         Colors.transparent,
-                        AppColors.white30,
+                        colorScheme.outlineVariant.withAlpha(100),
                         Colors.transparent,
                       ],
                     ),
@@ -71,112 +87,206 @@ class StoryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Text(
-                      story.body,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.white90,
-                        height: 1.6,
+                  child: ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white,
+                          Colors.white,
+                          Colors.white.withAlpha(0),
+                        ],
+                        stops: const [0.0, 0.85, 1.0],
+                      ).createShader(bounds);
+                    },
+                    blendMode: BlendMode.dstIn,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 60),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              story.body,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                height: 1.7,
+                                color: colorScheme.onSurface.withAlpha(230),
+                              ),
+                            ),
+                            // Top comment section
+                            if (story.hasTopComment) ...[
+                              const SizedBox(height: 24),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest.withAlpha(120),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: colorScheme.outline.withAlpha(50),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.chat_bubble_outline_rounded,
+                                          size: 16,
+                                          color: colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Top Comment',
+                                          style: theme.textTheme.labelMedium?.copyWith(
+                                            color: colorScheme.primary,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      story.topComment!,
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        height: 1.5,
+                                        fontStyle: FontStyle.italic,
+                                        color: colorScheme.onSurface.withAlpha(200),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildSwipeHints(),
+                _buildSwipeHints(theme, colorScheme),
               ],
             ),
           ),
-          if (swipeProgress != 0) _buildSwipeIndicator(),
+          if (swipeProgress != 0) _buildSwipeIndicator(colorScheme, isDark),
         ],
       ),
     );
   }
 
-  Color _getBorderColor() {
+  Color _getBorderColor(ColorScheme colorScheme, bool isDark) {
     if (swipeProgress > 0.1) {
       final alpha = (swipeProgress.clamp(0.0, 1.0) * 255).round();
-      return AppColors.nta.withAlpha(alpha);
+      return AppTheme.nta.withAlpha(alpha);
     } else if (swipeProgress < -0.1) {
       final alpha = ((-swipeProgress).clamp(0.0, 1.0) * 255).round();
-      return AppColors.yta.withAlpha(alpha);
+      return AppTheme.yta.withAlpha(alpha);
     }
-    return AppColors.white10;
+    return isDark
+        ? colorScheme.outlineVariant.withAlpha(50)
+        : colorScheme.outlineVariant.withAlpha(80);
   }
 
-  Widget _buildSwipeHints() {
-    final hintAlpha = (0.6 * 255).round();
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.arrow_back_rounded,
-              color: AppColors.yta.withAlpha(hintAlpha),
-              size: 20,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'YTA',
-              style: TextStyle(
-                color: AppColors.yta.withAlpha(hintAlpha),
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Text(
-              'NTA',
-              style: TextStyle(
-                color: AppColors.nta.withAlpha(hintAlpha),
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_forward_rounded,
-              color: AppColors.nta.withAlpha(hintAlpha),
-              size: 20,
-            ),
-          ],
-        ),
-      ],
+  Widget _buildSwipeHints(ThemeData theme, ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withAlpha(100),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _buildHintItem(
+            icon: Icons.arrow_back_rounded,
+            label: 'YTA',
+            color: AppTheme.yta,
+            isLeft: true,
+          ),
+          Container(
+            width: 1,
+            height: 24,
+            color: colorScheme.outlineVariant.withAlpha(80),
+          ),
+          _buildHintItem(
+            icon: Icons.arrow_forward_rounded,
+            label: 'NTA',
+            color: AppTheme.nta,
+            isLeft: false,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildSwipeIndicator() {
+  Widget _buildHintItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isLeft,
+  }) {
+    final alpha = 180;
+    final children = [
+      Icon(
+        icon,
+        color: color.withAlpha(alpha),
+        size: 20,
+      ),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: TextStyle(
+          color: color.withAlpha(alpha),
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          letterSpacing: 0.5,
+        ),
+      ),
+    ];
+
+    return Row(
+      children: isLeft ? children : children.reversed.toList(),
+    );
+  }
+
+  Widget _buildSwipeIndicator(ColorScheme colorScheme, bool isDark) {
     final isRight = swipeProgress > 0;
     final alpha = (swipeProgress.abs().clamp(0.0, 1.0) * 255).round();
-    final color = isRight ? AppColors.nta : AppColors.yta;
+    final color = isRight ? AppTheme.nta : AppTheme.yta;
 
     return Positioned(
-      top: 20,
-      left: isRight ? null : 20,
-      right: isRight ? 20 : null,
+      top: 24,
+      left: isRight ? null : 24,
+      right: isRight ? 24 : null,
       child: Transform.rotate(
-        angle: isRight ? 0.2 : -0.2,
+        angle: isRight ? 0.15 : -0.15,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
-            color: color.withAlpha((alpha * 0.9).round()),
-            borderRadius: BorderRadius.circular(8),
+            color: color.withAlpha((alpha * 0.95).round()),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: AppColors.white50,
+              color: Colors.white.withAlpha((alpha * 0.5).round()),
               width: 2,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withAlpha((alpha * 0.5).round()),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
           ),
           child: Text(
             isRight ? 'NTA' : 'YTA',
             style: TextStyle(
-              color: AppColors.textPrimary.withAlpha(alpha),
+              color: Colors.white.withAlpha(alpha),
               fontWeight: FontWeight.bold,
               fontSize: 24,
+              letterSpacing: 1,
             ),
           ),
         ),

@@ -1,5 +1,5 @@
 name: judge_it
-description: "A new Flutter project."
+description: "Judge It - Swipe your way through moral dilemmas and see if you agree with the crowd!"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -44,6 +44,19 @@ dependencies:
   
   # State Management
   provider: ^6.1.2
+  
+  # Local Storage
+  shared_preferences: ^2.3.5
+
+  # Animations & Visual Effects
+  confetti: ^0.8.0
+  lottie: ^3.3.1
+
+  # Haptic Feedback
+  vibration: ^3.0.0
+
+  # Audio
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +83,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/data/stories.json
+    - assets/audio/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

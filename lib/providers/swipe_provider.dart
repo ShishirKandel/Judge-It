@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import '../models/story.dart';
+import '../models/user_stats.dart';
 import '../repositories/story_repository.dart';
 import '../services/ad_service.dart';
+import '../services/haptic_service.dart';
 
 /// Vote type enum for clarity
 enum VoteType { nta, yta }
@@ -13,6 +15,7 @@ enum VoteType { nta, yta }
 class SwipeProvider extends ChangeNotifier {
   final StoryRepository _repository = StoryRepository();
   final AdService _adService = AdService();
+  final HapticService _hapticService = HapticService();
 
   // Story management
   final List<Story> _stories = [];
@@ -29,6 +32,10 @@ class SwipeProvider extends ChangeNotifier {
   VoteType? _lastVoteType;
   bool _showingResult = false;
 
+  // Stats tracking
+  bool _agreedWithMajority = false;
+  List<BadgeType> _newlyUnlockedBadges = [];
+
   // Getters
   List<Story> get stories => _stories;
   bool get isLoading => _isLoading;
@@ -38,6 +45,8 @@ class SwipeProvider extends ChangeNotifier {
   Story? get lastVotedStory => _lastVotedStory;
   VoteType? get lastVoteType => _lastVoteType;
   bool get showingResult => _showingResult;
+  bool get agreedWithMajority => _agreedWithMajority;
+  List<BadgeType> get newlyUnlockedBadges => _newlyUnlockedBadges;
   
   /// Whether using local data (for UI indicator)
   bool get isOfflineMode => _repository.isUsingLocalData;
@@ -80,7 +89,7 @@ class SwipeProvider extends ChangeNotifier {
   }
 
   /// Handle a swipe action
-  /// 
+  ///
   /// [storyIndex] - Index of the swiped story in the current list
   /// [isRightSwipe] - True for NTA (right), false for YTA (left)
   Future<void> onSwipe(int storyIndex, bool isRightSwipe) async {
@@ -93,6 +102,20 @@ class SwipeProvider extends ChangeNotifier {
     _lastVotedStory = story.copyWithVote(isYesVote: isRightSwipe);
     _lastVoteType = voteType;
     _showingResult = true;
+
+    // Determine if user agreed with majority (before their vote was added)
+    // Majority is >50% for NTA (yes_votes) or YTA (no_votes)
+    final majorityIsNta = story.ntaPercentage > 0.5;
+    final userVotedNta = isRightSwipe;
+    _agreedWithMajority = (majorityIsNta == userVotedNta);
+
+    // Haptic feedback
+    if (_agreedWithMajority) {
+      _hapticService.successFeedback();
+    } else {
+      _hapticService.mediumImpact();
+    }
+
     notifyListeners();
 
     // Increment swipe counter and check for ad
@@ -141,6 +164,16 @@ class SwipeProvider extends ChangeNotifier {
     _showingResult = false;
     _lastVotedStory = null;
     _lastVoteType = null;
+    _newlyUnlockedBadges = [];
+    notifyListeners();
+  }
+
+  /// Set newly unlocked badges (called from SwipeScreen after stats update)
+  void setNewlyUnlockedBadges(List<BadgeType> badges) {
+    _newlyUnlockedBadges = badges;
+    if (badges.isNotEmpty) {
+      _hapticService.badgeUnlockFeedback();
+    }
     notifyListeners();
   }
 

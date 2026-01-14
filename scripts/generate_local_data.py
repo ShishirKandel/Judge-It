@@ -1,11 +1,12 @@
 """
 Generate Local JSON Data for Judge It App
 ==========================================
-Creates a bundled JSON file with high-engagement stories for offline/fallback use.
+Creates a bundled JSON file with TOP-SCORED stories for offline/fallback use.
+Stories are sorted by Reddit score and randomized for display.
 
 Usage:
   python generate_local_data.py
-  python generate_local_data.py --limit 3000 --min-score 5000
+  python generate_local_data.py --top 3500
 
 Requirements:
   - pip install datasets
@@ -20,8 +21,8 @@ import sys
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), '..', 'assets', 'data', 'stories.json')
 DATASET_NAME = "MattBoraske/reddit-AITA-submissions-and-comments-multiclass"
 
-# Default minimum score for "interesting" stories
-DEFAULT_MIN_SCORE = 5000
+# Default: get top N stories by score
+DEFAULT_TOP_COUNT = 3500
 
 
 def generate_votes_from_score(score: int) -> tuple[int, int]:
@@ -33,14 +34,14 @@ def generate_votes_from_score(score: int) -> tuple[int, int]:
         else:
             yes_votes = random.randint(20, 80)
             no_votes = random.randint(500, 900)
-    elif score > 10000:
+    elif score > 20000:
         if random.random() > 0.4:
             yes_votes = random.randint(400, 700)
             no_votes = random.randint(30, 100)
         else:
             yes_votes = random.randint(30, 100)
             no_votes = random.randint(400, 700)
-    else:  # score > 5000 (our minimum)
+    else:
         ratio = random.random()
         if ratio > 0.6:
             yes_votes = random.randint(300, 600)
@@ -63,13 +64,12 @@ def generate_id() -> str:
     return ''.join(random.choice(chars) for _ in range(20))
 
 
-def load_and_process_data(limit: int = 3000, min_score: int = DEFAULT_MIN_SCORE) -> list[dict]:
+def load_and_process_data(top_count: int = DEFAULT_TOP_COUNT) -> list[dict]:
     """
-    Load high-engagement stories from HuggingFace and process for local storage.
+    Load TOP stories from HuggingFace sorted by score (highest first).
     
     Args:
-        limit: Maximum number of stories to include
-        min_score: Minimum Reddit score for a story to be included
+        top_count: Number of top-scored stories to include
     """
     try:
         from datasets import load_dataset
@@ -82,66 +82,81 @@ def load_and_process_data(limit: int = 3000, min_score: int = DEFAULT_MIN_SCORE)
     dataset = load_dataset(DATASET_NAME, split="train")
     
     print(f"Dataset loaded: {len(dataset)} total rows")
-    print(f"Filtering for stories with score >= {min_score}...")
     
-    # Filter for high-engagement stories first
-    high_engagement = []
+    # Convert to list and sort by score (highest first)
+    print("Sorting by score (highest first)...")
+    all_stories = []
     for row in dataset:
         score = row.get('submission_score', 0) or 0
-        if score >= min_score:
-            high_engagement.append(row)
-    
-    print(f"Found {len(high_engagement)} high-engagement stories")
-    
-    # Shuffle and limit
-    random.seed(42)
-    random.shuffle(high_engagement)
-    if limit and len(high_engagement) > limit:
-        high_engagement = high_engagement[:limit]
-    
-    stories = []
-    for row in high_engagement:
         title = row.get('submission_title', '') or ''
         text = row.get('submission_text', '') or ''
-        score = row.get('submission_score', 0) or 0
+        top_comment = row.get('top_comment_1', '') or ''
         
+        # Skip empty or too short
         if not title.strip() or not text.strip():
             continue
         if len(text) < 100:
             continue
         
-        yes_votes, no_votes = generate_votes_from_score(score)
+        all_stories.append({
+            'score': score,
+            'title': title.strip(),
+            'body': text.strip(),
+            'top_comment': top_comment.strip() if top_comment else None,
+        })
+    
+    # Sort by score descending
+    all_stories.sort(key=lambda x: x['score'], reverse=True)
+    
+    print(f"Valid stories: {len(all_stories)}")
+    print(f"Score range: {all_stories[0]['score']} (highest) to {all_stories[-1]['score']} (lowest)")
+    
+    # Take top N
+    top_stories = all_stories[:top_count]
+    print(f"Selected top {len(top_stories)} stories")
+    print(f"Min score in selection: {top_stories[-1]['score']}")
+    
+    # Add votes and IDs
+    stories = []
+    for row in top_stories:
+        yes_votes, no_votes = generate_votes_from_score(row['score'])
         
         story = {
             'id': generate_id(),
-            'title': title.strip(),
-            'body': text.strip(),
+            'title': row['title'],
+            'body': row['body'],
             'yes_votes': yes_votes,
             'no_votes': no_votes,
         }
+        
+        # Add top comment if available
+        if row.get('top_comment'):
+            story['top_comment'] = row['top_comment']
+        
         stories.append(story)
+    
+    # Shuffle for random display order
+    random.shuffle(stories)
+    print("Shuffled stories for random display order")
     
     return stories
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate local JSON data for offline use')
-    parser.add_argument('--limit', type=int, default=3000,
-                        help='Max number of stories to include (default: 3000)')
-    parser.add_argument('--min-score', type=int, default=DEFAULT_MIN_SCORE,
-                        help=f'Minimum Reddit score for stories (default: {DEFAULT_MIN_SCORE})')
+    parser = argparse.ArgumentParser(description='Generate local JSON with top-scored stories')
+    parser.add_argument('--top', type=int, default=DEFAULT_TOP_COUNT,
+                        help=f'Number of top-scored stories to include (default: {DEFAULT_TOP_COUNT})')
     
     args = parser.parse_args()
     
     print("=" * 50)
-    print("Judge It - Local Data Generator (High Engagement)")
+    print("Judge It - Local Data Generator (Top Scored)")
     print("=" * 50)
-    print(f"Min score filter: {args.min_score}")
-    print(f"Max stories: {args.limit}")
+    print(f"Getting top {args.top} stories by Reddit score")
     
     # Load and process data
-    stories = load_and_process_data(args.limit, args.min_score)
-    print(f"Processed {len(stories)} valid high-engagement stories")
+    stories = load_and_process_data(args.top)
+    print(f"Processed {len(stories)} stories")
     
     # Ensure output directory exists
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
