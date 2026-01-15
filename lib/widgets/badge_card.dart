@@ -29,7 +29,9 @@ class BadgeCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isEarned
-            ? (isDark ? AppColors.gold.withAlpha(20) : AppColors.gold.withAlpha(15))
+            ? (isDark
+                  ? AppColors.gold.withAlpha(20)
+                  : AppColors.gold.withAlpha(15))
             : (isDark ? colorScheme.surfaceContainerHigh : Colors.white),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
@@ -79,10 +81,10 @@ class BadgeCard extends StatelessWidget {
               color: isEarned
                   ? colorScheme.onSurface
                   : colorScheme.onSurfaceVariant.withAlpha(180),
+              fontSize: 11,
             ),
             textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
           const SizedBox(height: 6),
 
@@ -198,14 +200,9 @@ class _BadgeUnlockCelebrationState extends State<BadgeUnlockCelebration>
               margin: const EdgeInsets.all(32),
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: isDark
-                    ? colorScheme.surfaceContainerHigh
-                    : Colors.white,
+                color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: AppColors.gold,
-                  width: 2,
-                ),
+                border: Border.all(color: AppColors.gold, width: 2),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -249,10 +246,7 @@ class _BadgeUnlockCelebrationState extends State<BadgeUnlockCelebration>
                     decoration: BoxDecoration(
                       color: AppColors.gold.withAlpha(25),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.gold,
-                        width: 3,
-                      ),
+                      border: Border.all(color: AppColors.gold, width: 3),
                     ),
                     child: Center(
                       child: Text(

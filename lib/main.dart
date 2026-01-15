@@ -10,19 +10,22 @@ import 'screens/swipe_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'theme/app_theme.dart';
 import 'services/audio_service.dart';
+import 'services/firestore_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
   // Configure system UI for immersive judicial experience
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarDividerColor: Colors.transparent,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ),
+  );
 
   // Enable edge-to-edge for modern immersive look
   SystemChrome.setEnabledSystemUIMode(
@@ -57,12 +60,14 @@ void main() async {
   // Check onboarding completion status
   final showOnboarding = !await OnboardingHelper.isComplete();
 
-  runApp(JudgeItApp(
-    showOnboarding: showOnboarding,
-    themeProvider: themeProvider,
-    statsProvider: statsProvider,
-    settingsProvider: settingsProvider,
-  ));
+  runApp(
+    JudgeItApp(
+      showOnboarding: showOnboarding,
+      themeProvider: themeProvider,
+      statsProvider: statsProvider,
+      settingsProvider: settingsProvider,
+    ),
+  );
 }
 
 /// Root widget for the Judge It app.
@@ -89,16 +94,21 @@ class JudgeItApp extends StatefulWidget {
 
 class _JudgeItAppState extends State<JudgeItApp> with WidgetsBindingObserver {
   late bool _showOnboarding;
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   void initState() {
     super.initState();
     _showOnboarding = widget.showOnboarding;
     WidgetsBinding.instance.addObserver(this);
+    // Mark user as active when app starts
+    _firestoreService.markUserActive();
   }
 
   @override
   void dispose() {
+    // Mark user as inactive when app closes
+    _firestoreService.markUserInactive();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -108,13 +118,18 @@ class _JudgeItAppState extends State<JudgeItApp> with WidgetsBindingObserver {
     // Handle audio when app goes to background/foreground
     final audioService = AudioService();
     final settingsProvider = widget.settingsProvider;
+    final firestoreService = FirestoreService();
 
     if (state == AppLifecycleState.paused) {
       audioService.pauseMusic();
+      // Mark user as inactive for live count
+      firestoreService.markUserInactive();
     } else if (state == AppLifecycleState.resumed) {
       if (settingsProvider.musicEnabled) {
         audioService.resumeMusic();
       }
+      // Mark user as active for live count
+      firestoreService.markUserActive();
     }
   }
 
@@ -137,13 +152,19 @@ class _JudgeItAppState extends State<JudgeItApp> with WidgetsBindingObserver {
         builder: (context, themeProvider, child) {
           // Dynamically update system UI based on current theme
           final isDark = themeProvider.isDarkMode;
-          SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-            systemNavigationBarColor: Colors.transparent,
-            systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-            systemNavigationBarDividerColor: Colors.transparent,
-          ));
+          SystemChrome.setSystemUIOverlayStyle(
+            SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: isDark
+                  ? Brightness.light
+                  : Brightness.dark,
+              systemNavigationBarColor: Colors.transparent,
+              systemNavigationBarIconBrightness: isDark
+                  ? Brightness.light
+                  : Brightness.dark,
+              systemNavigationBarDividerColor: Colors.transparent,
+            ),
+          );
 
           return MaterialApp(
             title: 'Judge It',

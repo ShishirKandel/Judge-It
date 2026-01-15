@@ -36,18 +36,16 @@ class FirestoreService {
   static const String _globalStatsDoc = 'global';
 
   /// Fetches a batch of stories for infinite scrolling.
-  /// 
+  ///
   /// [limit] - Number of stories to fetch (default: 5)
   /// [lastDocument] - Last document from previous fetch for pagination
-  /// 
+  ///
   /// Returns a list of Story objects and the last DocumentSnapshot for pagination.
   Future<({List<Story> stories, DocumentSnapshot? lastDoc})> fetchStories({
     int limit = 5,
     DocumentSnapshot? lastDocument,
   }) async {
-    Query query = _firestore
-        .collection(_collectionName)
-        .limit(limit);
+    Query query = _firestore.collection(_collectionName).limit(limit);
 
     if (lastDocument != null) {
       query = query.startAfterDocument(lastDocument);
@@ -59,7 +57,9 @@ class FirestoreService {
       return (stories: <Story>[], lastDoc: null);
     }
 
-    final stories = snapshot.docs.map((doc) => Story.fromFirestore(doc)).toList();
+    final stories = snapshot.docs
+        .map((doc) => Story.fromFirestore(doc))
+        .toList();
     final lastDoc = snapshot.docs.last;
 
     return (stories: stories, lastDoc: lastDoc);
@@ -90,20 +90,55 @@ class FirestoreService {
           .collection(_appStatsCollection)
           .doc(_globalStatsDoc)
           .update({
-        'total_judgments': FieldValue.increment(1),
-        'stories_judged_today': FieldValue.increment(1),
-      });
+            'total_judgments': FieldValue.increment(1),
+            'stories_judged_today': FieldValue.increment(1),
+          });
     } catch (e) {
       // If document doesn't exist, create it
       await _firestore
           .collection(_appStatsCollection)
           .doc(_globalStatsDoc)
           .set({
-        'total_judgments': 1,
-        'active_users_today': 1,
-        'stories_judged_today': 1,
-        'last_reset': FieldValue.serverTimestamp(),
-      });
+            'total_judgments': 1,
+            'active_users_today': 1,
+            'stories_judged_today': 1,
+            'last_reset': FieldValue.serverTimestamp(),
+          });
+    }
+  }
+
+  /// Mark user as active (increment active users count)
+  /// Call this when app starts/resumes
+  Future<void> markUserActive() async {
+    try {
+      await _firestore
+          .collection(_appStatsCollection)
+          .doc(_globalStatsDoc)
+          .update({'active_users_today': FieldValue.increment(1)});
+    } catch (e) {
+      // If document doesn't exist, create it
+      await _firestore
+          .collection(_appStatsCollection)
+          .doc(_globalStatsDoc)
+          .set({
+            'total_judgments': 0,
+            'active_users_today': 1,
+            'stories_judged_today': 0,
+            'last_reset': FieldValue.serverTimestamp(),
+          });
+    }
+  }
+
+  /// Mark user as inactive (decrement active users count)
+  /// Call this when app pauses/closes
+  Future<void> markUserInactive() async {
+    try {
+      await _firestore
+          .collection(_appStatsCollection)
+          .doc(_globalStatsDoc)
+          .update({'active_users_today': FieldValue.increment(-1)});
+    } catch (e) {
+      // Ignore errors when marking inactive
     }
   }
 
@@ -111,11 +146,9 @@ class FirestoreService {
   ///
   /// Useful for showing live vote count updates on result overlay.
   Stream<Story?> watchStory(String storyId) {
-    return _firestore
-        .collection(_collectionName)
-        .doc(storyId)
-        .snapshots()
-        .map((doc) {
+    return _firestore.collection(_collectionName).doc(storyId).snapshots().map((
+      doc,
+    ) {
       if (!doc.exists) return null;
       return Story.fromFirestore(doc);
     });
@@ -135,9 +168,9 @@ class FirestoreService {
         .doc(_globalStatsDoc)
         .snapshots()
         .map((doc) {
-      if (!doc.exists) return const GlobalAppStats();
-      return GlobalAppStats.fromFirestore(doc);
-    });
+          if (!doc.exists) return const GlobalAppStats();
+          return GlobalAppStats.fromFirestore(doc);
+        });
   }
 
   /// Fetch global stats once (non-realtime).
