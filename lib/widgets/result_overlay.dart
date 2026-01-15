@@ -8,8 +8,9 @@ import 'avatar_widget.dart';
 
 /// Overlay widget showing vote results after a swipe.
 ///
-/// Displays the user's choice, agreement percentage, mascot reaction, and confetti.
-/// Supports realtime vote count updates via Firestore listener.
+/// Design: Dramatic verdict reveal - performance optimized.
+/// Displays the user's choice, agreement percentage, and avatar reaction.
+/// No continuous animations for better performance.
 class ResultOverlay extends StatefulWidget {
   final VoteType voteType;
   final double agreementPercentage;
@@ -30,18 +31,48 @@ class ResultOverlay extends StatefulWidget {
   State<ResultOverlay> createState() => _ResultOverlayState();
 }
 
-class _ResultOverlayState extends State<ResultOverlay> {
+class _ResultOverlayState extends State<ResultOverlay>
+    with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   late double _currentPercentage;
   int? _totalVotes;
+
+  late AnimationController _animController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _percentageAnimation;
 
   @override
   void initState() {
     super.initState();
     _currentPercentage = widget.agreementPercentage;
+
+    // Single controller for all entrance animations
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _scaleAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.0, 0.5, curve: Curves.easeOutBack),
+    );
+
+    _percentageAnimation = Tween<double>(begin: 0, end: _currentPercentage).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _animController.forward();
   }
 
-  /// Determine avatar reaction type based on agreement percentage
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
   String _getAvatarReaction() {
     if (_currentPercentage > 0.6) {
       return 'happy';
@@ -49,6 +80,18 @@ class _ResultOverlayState extends State<ResultOverlay> {
       return 'sad';
     } else {
       return 'neutral';
+    }
+  }
+
+  String _getReactionMessage() {
+    if (_currentPercentage > 0.7) {
+      return 'Great minds think alike!';
+    } else if (_currentPercentage > 0.5) {
+      return 'You\'re with the majority!';
+    } else if (_currentPercentage > 0.4) {
+      return 'A close call!';
+    } else {
+      return 'Bold judgment!';
     }
   }
 
@@ -61,61 +104,31 @@ class _ResultOverlayState extends State<ResultOverlay> {
     final color = isNta ? AppTheme.nta : AppTheme.yta;
     final label = isNta ? 'Not the A**hole' : "You're the A**hole";
     final shortLabel = isNta ? 'NTA' : 'YTA';
-    final percentage = (_currentPercentage * 100).toStringAsFixed(0);
 
     return ConfettiOverlay(
       showConfetti: widget.agreedWithMajority,
       child: GestureDetector(
         onTap: widget.onDismiss,
         child: Container(
-          color: isDark
-              ? Colors.black.withAlpha(220)
-              : colorScheme.scrim.withAlpha(200),
+          color: Colors.black.withAlpha(isDark ? 220 : 200),
           child: Center(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.elasticOut,
-              builder: (context, value, child) {
-                return Transform.scale(
-                  scale: value,
-                  child: child,
-                );
-              },
+            child: ScaleTransition(
+              scale: _scaleAnimation,
               child: Container(
-                margin: const EdgeInsets.all(32),
-                padding: const EdgeInsets.all(32),
+                margin: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [
-                            color.withAlpha(60),
-                            color.withAlpha(20),
-                          ]
-                        : [
-                            color.withAlpha(40),
-                            color.withAlpha(15),
-                          ],
-                  ),
+                  color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
                   borderRadius: BorderRadius.circular(28),
                   border: Border.all(
-                    color: color.withAlpha(isDark ? 140 : 100),
+                    color: color.withAlpha(100),
                     width: 2,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withAlpha(isDark ? 80 : 60),
-                      blurRadius: 40,
-                      spreadRadius: 8,
-                    ),
-                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Badge with short label
+                    // Verdict badge - static
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 28,
@@ -123,26 +136,19 @@ class _ResultOverlayState extends State<ResultOverlay> {
                       ),
                       decoration: BoxDecoration(
                         color: color,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withAlpha(100),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
                         shortLabel,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 32,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w900,
                           letterSpacing: 2,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
 
                     // Full label
                     Text(
@@ -152,90 +158,69 @@ class _ResultOverlayState extends State<ResultOverlay> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
 
-                    // Animated avatar reaction (replaces JudgeMascot)
-                    AvatarWidget(reaction: _getAvatarReaction(), size: 80),
-                    const SizedBox(height: 24),
+                    // Avatar reaction
+                    AvatarWidget(reaction: _getAvatarReaction(), size: 70),
+                    const SizedBox(height: 10),
 
-                    // Percentage display
+                    // Reaction message
                     Text(
-                      '$percentage%',
-                      style: theme.textTheme.displayLarge?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                        height: 1,
+                      _getReactionMessage(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'agreed with you',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white.withAlpha(220),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 24),
 
-                    // Continue hint
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withAlpha(15)
-                            : colorScheme.surfaceContainerHighest.withAlpha(150),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.touch_app_rounded,
-                            size: 16,
-                            color: isDark
-                                ? Colors.white.withAlpha(120)
-                                : colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Tap anywhere to continue',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isDark
-                                  ? Colors.white.withAlpha(120)
-                                  : colorScheme.onSurfaceVariant,
+                    // Animated percentage display
+                    AnimatedBuilder(
+                      animation: _percentageAnimation,
+                      builder: (context, child) {
+                        final percent = (_percentageAnimation.value * 100).toStringAsFixed(0);
+                        return Column(
+                          children: [
+                            Text(
+                              '$percent%',
+                              style: theme.textTheme.displayMedium?.copyWith(
+                                color: color,
+                                fontWeight: FontWeight.w900,
+                                height: 1,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'agreed with you',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onSurface.withAlpha(200),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                    // Total votes indicator (if available)
+
+                    // Total votes
                     if (_totalVotes != null) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.people_rounded,
-                            size: 14,
-                            color: isDark
-                                ? Colors.white.withAlpha(100)
-                                : colorScheme.onSurfaceVariant.withAlpha(150),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$_totalVotes total votes',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isDark
-                                  ? Colors.white.withAlpha(100)
-                                  : colorScheme.onSurfaceVariant.withAlpha(150),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 14),
+                      Text(
+                        '$_totalVotes total votes',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
+
+                    const SizedBox(height: 28),
+
+                    // Continue hint
+                    Text(
+                      'Tap to continue',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant.withAlpha(140),
+                      ),
+                    ),
                   ],
                 ),
               ),

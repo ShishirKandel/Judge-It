@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'providers/swipe_provider.dart';
@@ -14,27 +15,46 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
-  // Initialize theme provider
+  // Configure system UI for immersive judicial experience
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarDividerColor: Colors.transparent,
+  ));
+
+  // Enable edge-to-edge for modern immersive look
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.edgeToEdge,
+    overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+  );
+
+  // Lock to portrait for optimal swipe experience
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Initialize providers with proper lifecycle
   final themeProvider = ThemeProvider();
   await themeProvider.initialize();
 
-  // Initialize stats provider
   final statsProvider = StatsProvider();
   await statsProvider.initialize();
 
-  // Initialize settings provider
   final settingsProvider = SettingsProvider();
   await settingsProvider.loadSettings();
 
   // Initialize audio service
   await AudioService().initialize();
-  
-  // Auto-play music if enabled in settings
+
+  // Auto-play background music if enabled
   if (settingsProvider.musicEnabled) {
     AudioService().playMusic();
   }
 
-  // Check if onboarding is complete
+  // Check onboarding completion status
   final showOnboarding = !await OnboardingHelper.isComplete();
 
   runApp(JudgeItApp(
@@ -45,6 +65,10 @@ void main() async {
   ));
 }
 
+/// Root widget for the Judge It app.
+///
+/// Design: Modern Courtroom Drama aesthetic with judicial gold accents.
+/// Uses Provider for state management and Material 3 theming.
 class JudgeItApp extends StatefulWidget {
   final bool showOnboarding;
   final ThemeProvider themeProvider;
@@ -63,13 +87,35 @@ class JudgeItApp extends StatefulWidget {
   State<JudgeItApp> createState() => _JudgeItAppState();
 }
 
-class _JudgeItAppState extends State<JudgeItApp> {
+class _JudgeItAppState extends State<JudgeItApp> with WidgetsBindingObserver {
   late bool _showOnboarding;
 
   @override
   void initState() {
     super.initState();
     _showOnboarding = widget.showOnboarding;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Handle audio when app goes to background/foreground
+    final audioService = AudioService();
+    final settingsProvider = widget.settingsProvider;
+
+    if (state == AppLifecycleState.paused) {
+      audioService.pauseMusic();
+    } else if (state == AppLifecycleState.resumed) {
+      if (settingsProvider.musicEnabled) {
+        audioService.resumeMusic();
+      }
+    }
   }
 
   void _completeOnboarding() {
@@ -89,18 +135,44 @@ class _JudgeItAppState extends State<JudgeItApp> {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
+          // Dynamically update system UI based on current theme
+          final isDark = themeProvider.isDarkMode;
+          SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ));
+
           return MaterialApp(
             title: 'Judge It',
             debugShowCheckedModeBanner: false,
 
-            // Theme configuration
+            // Theme configuration - Modern Courtroom Drama
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
 
+            // Initial route based on onboarding status
             home: _showOnboarding
                 ? OnboardingScreen(onComplete: _completeOnboarding)
                 : const SwipeScreen(),
+
+            // Global builder for consistent UI behavior
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  // Prevent system font scaling for consistent UI
+                  textScaler: TextScaler.noScaling,
+                ),
+                child: GestureDetector(
+                  // Dismiss keyboard on tap outside
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  child: child!,
+                ),
+              );
+            },
           );
         },
       ),

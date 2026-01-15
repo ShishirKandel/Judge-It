@@ -10,10 +10,12 @@ import '../services/audio_service.dart';
 import '../widgets/story_card.dart';
 import '../widgets/result_overlay.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 import 'stats_screen.dart';
 
 /// Main swipe screen for judging stories.
 ///
+/// Design: Dramatic courtroom experience with immersive card swiping.
 /// Uses AppinioSwiper for card swiping with infinite scroll.
 class SwipeScreen extends StatefulWidget {
   const SwipeScreen({super.key});
@@ -22,10 +24,14 @@ class SwipeScreen extends StatefulWidget {
   State<SwipeScreen> createState() => _SwipeScreenState();
 }
 
-class _SwipeScreenState extends State<SwipeScreen> {
+class _SwipeScreenState extends State<SwipeScreen>
+    with TickerProviderStateMixin {
   late AppinioSwiperController _swiperController;
   int _currentIndex = 0;
   double _swipeProgress = 0.0;
+
+  late AnimationController _glowController;
+  late Animation<double> _glowAnimation;
 
   /// Divisor for converting swipe offset to progress (-1.0 to 1.0)
   static const double _swipeProgressDivisor = 200.0;
@@ -35,6 +41,15 @@ class _SwipeScreenState extends State<SwipeScreen> {
     super.initState();
     _swiperController = AppinioSwiperController();
 
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.6).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SwipeProvider>().initialize();
     });
@@ -43,37 +58,81 @@ class _SwipeScreenState extends State<SwipeScreen> {
   @override
   void dispose() {
     _swiperController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      appBar: _buildAppBar(context, _swipeProgress),
       body: Stack(
         children: [
-          // Swiper - only rebuilds when stories/loading/error changes
-          Selector<SwipeProvider, ({List<Story> stories, bool isLoading, String? error, bool hasMore})>(
-            selector: (_, provider) => (
-              stories: provider.stories,
-              isLoading: provider.isLoading,
-              error: provider.error,
-              hasMore: provider.hasMore,
+          // Ambient background glow based on swipe direction
+          if (_swipeProgress.abs() > 0.1)
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 100),
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(_swipeProgress > 0 ? 0.8 : -0.8, -0.3),
+                    radius: 1.5,
+                    colors: [
+                      (_swipeProgress > 0 ? AppTheme.nta : AppTheme.yta)
+                          .withAlpha(((_swipeProgress.abs() * 40).round())),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
             ),
-            builder: (context, data, child) {
-              final provider = context.read<SwipeProvider>();
-              return _buildSwiperContentFromData(
-                context,
-                data.stories,
-                data.isLoading,
-                data.error,
-                data.hasMore,
-                provider,
-              );
-            },
+
+          // Main content
+          SafeArea(
+            child: Column(
+              children: [
+                // Custom App Bar
+                _buildAppBar(context),
+
+                // Swiper content
+                Expanded(
+                  child:
+                      Selector<
+                        SwipeProvider,
+                        ({
+                          List<Story> stories,
+                          bool isLoading,
+                          String? error,
+                          bool hasMore,
+                        })
+                      >(
+                        selector: (_, provider) => (
+                          stories: provider.stories,
+                          isLoading: provider.isLoading,
+                          error: provider.error,
+                          hasMore: provider.hasMore,
+                        ),
+                        builder: (context, data, child) {
+                          final provider = context.read<SwipeProvider>();
+                          return _buildSwiperContent(
+                            context,
+                            data.stories,
+                            data.isLoading,
+                            data.error,
+                            data.hasMore,
+                            provider,
+                          );
+                        },
+                      ),
+                ),
+              ],
+            ),
           ),
-          
-          // Result overlay - separate Consumer, doesn't rebuild swiper
+
+          // Result overlay
           Consumer<SwipeProvider>(
             builder: (context, provider, child) {
               if (provider.showingResult && provider.lastVoteType != null) {
@@ -92,8 +151,208 @@ class _SwipeScreenState extends State<SwipeScreen> {
       ),
     );
   }
-  
-  Widget _buildSwiperContentFromData(
+
+  Widget _buildAppBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          // Theme toggle
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, _) {
+              return _buildIconButton(
+                icon: themeProvider.themeIcon,
+                onTap: () => themeProvider.toggleTheme(),
+                colorScheme: colorScheme,
+                isDark: isDark,
+              );
+            },
+          ),
+
+          const Spacer(),
+
+          // Logo and title
+          _buildLogoTitle(theme, colorScheme),
+
+          const Spacer(),
+
+          // Streak indicator
+          Consumer<StatsProvider>(
+            builder: (context, statsProvider, _) {
+              final streak = statsProvider.currentStreak;
+              if (streak >= 2) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _buildStreakBadge(streak, theme),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+
+          // Music toggle
+          Consumer<SettingsProvider>(
+            builder: (context, settings, _) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _buildIconButton(
+                  icon: settings.musicEnabled
+                      ? Icons.music_note_rounded
+                      : Icons.music_off_rounded,
+                  onTap: () {
+                    settings.toggleMusic();
+                    if (settings.musicEnabled) {
+                      AudioService().playMusic();
+                    } else {
+                      AudioService().stopMusic();
+                    }
+                  },
+                  colorScheme: colorScheme,
+                  isDark: isDark,
+                  isActive: settings.musicEnabled,
+                ),
+              );
+            },
+          ),
+
+          // Stats button
+          _buildIconButton(
+            icon: Icons.bar_chart_rounded,
+            onTap: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const StatsScreen()));
+            },
+            colorScheme: colorScheme,
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+    required bool isDark,
+    bool isActive = true,
+  }) {
+    return Material(
+      color: isDark
+          ? colorScheme.surfaceContainerHigh
+          : colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 48,
+          height: 48,
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            color: isActive
+                ? colorScheme.primary
+                : colorScheme.onSurfaceVariant,
+            size: 22,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoTitle(ThemeData theme, ColorScheme colorScheme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Gavel icon with glow
+        AnimatedBuilder(
+          animation: _glowAnimation,
+          builder: (context, child) {
+            return Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colorScheme.primary.withAlpha(40),
+                    colorScheme.primary.withAlpha(20),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: colorScheme.primary.withAlpha(60),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.primary.withAlpha(
+                      (_glowAnimation.value * 80).round(),
+                    ),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.gavel_rounded,
+                color: colorScheme.primary,
+                size: 22,
+              ),
+            );
+          },
+        ),
+        const SizedBox(width: 12),
+        Text(
+          'Judge It',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreakBadge(int streak, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.streakFire.withAlpha(30),
+            AppColors.streakFireGlow.withAlpha(20),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.streakFire.withAlpha(80), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('🔥', style: TextStyle(fontSize: 16)),
+          const SizedBox(width: 4),
+          Text(
+            '$streak',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: AppColors.streakFire,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwiperContent(
     BuildContext context,
     List<Story> stories,
     bool isLoading,
@@ -117,12 +376,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
       return _buildCompletedState(context);
     }
 
-    return _buildSwiperFromStories(stories);
+    return _buildSwiper(stories);
   }
-  
-  Widget _buildSwiperFromStories(List<Story> stories) {
+
+  Widget _buildSwiper(List<Story> stories) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: AppinioSwiper(
         key: const ValueKey('main_swiper'),
         controller: _swiperController,
@@ -147,191 +406,6 @@ class _SwipeScreenState extends State<SwipeScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, double swipeProgress) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    // Calculate app bar background color based on swipe direction
-    Color? appBarColor;
-    if (swipeProgress > 0.1) {
-      // Swiping right - NTA (green)
-      final intensity = (swipeProgress.clamp(0.0, 1.0) * 0.3);
-      appBarColor = Color.lerp(
-        colorScheme.surface,
-        AppTheme.nta,
-        intensity,
-      );
-    } else if (swipeProgress < -0.1) {
-      // Swiping left - YTA (red)
-      final intensity = ((-swipeProgress).clamp(0.0, 1.0) * 0.3);
-      appBarColor = Color.lerp(
-        colorScheme.surface,
-        AppTheme.yta,
-        intensity,
-      );
-    }
-
-    return AppBar(
-      centerTitle: true,
-      backgroundColor: appBarColor,
-      leading: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, _) {
-          return Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: Material(
-              color: colorScheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: () => themeProvider.toggleTheme(),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    transitionBuilder: (child, animation) {
-                      return ScaleTransition(
-                        scale: animation,
-                        child: FadeTransition(opacity: animation, child: child),
-                      );
-                    },
-                    child: Icon(
-                      themeProvider.themeIcon,
-                      key: ValueKey(themeProvider.isDarkMode),
-                      color: colorScheme.primary,
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withAlpha(30),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.gavel_rounded,
-              color: colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Judge It',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        // Streak indicator
-        Consumer<StatsProvider>(
-          builder: (context, statsProvider, _) {
-            final streak = statsProvider.currentStreak;
-            if (streak < 2) return const SizedBox.shrink();
-            return Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.orange.withAlpha(30),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.orange.withAlpha(100),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🔥', style: TextStyle(fontSize: 14)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$streak',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: Colors.orange,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        // Music toggle button
-        Consumer<SettingsProvider>(
-          builder: (context, settings, _) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: IconButton(
-                onPressed: () {
-                  settings.toggleMusic();
-                  if (settings.musicEnabled) {
-                    AudioService().playMusic();
-                  } else {
-                    AudioService().stopMusic();
-                  }
-                },
-                icon: Icon(
-                  settings.musicEnabled
-                      ? Icons.volume_up_rounded
-                      : Icons.volume_off_rounded,
-                  color: settings.musicEnabled
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant,
-                ),
-                tooltip: settings.musicEnabled ? 'Music On' : 'Music Off',
-              ),
-            );
-          },
-        ),
-        // Stats button
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: Material(
-            color: colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const StatsScreen()),
-                );
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.bar_chart_rounded,
-                  color: colorScheme.primary,
-                  size: 24,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLoadingState(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -340,19 +414,31 @@ class _SwipeScreenState extends State<SwipeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Animated loading indicator
           SizedBox(
-            width: 48,
-            height: 48,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: colorScheme.primary,
+            width: 64,
+            height: 64,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                Icon(Icons.gavel_rounded, color: colorScheme.primary, size: 24),
+              ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           Text(
-            'Loading stories...',
-            style: theme.textTheme.bodyLarge?.copyWith(
+            'Loading cases...',
+            style: theme.textTheme.titleMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -366,42 +452,46 @@ class _SwipeScreenState extends State<SwipeScreen> {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: colorScheme.errorContainer,
+                color: colorScheme.errorContainer.withAlpha(40),
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: colorScheme.error.withAlpha(60),
+                  width: 2,
+                ),
               ),
               child: Icon(
                 Icons.error_outline_rounded,
-                color: colorScheme.onErrorContainer,
+                color: colorScheme.error,
                 size: 48,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
-              'Failed to load stories',
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: colorScheme.onSurface,
+              'Failed to load cases',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
-              provider.error!,
+              provider.error ?? 'An unexpected error occurred',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
             FilledButton.icon(
               onPressed: () => provider.reset(),
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
+              label: const Text('Try Again'),
             ),
           ],
         ),
@@ -414,36 +504,41 @@ class _SwipeScreenState extends State<SwipeScreen> {
     final colorScheme = theme.colorScheme;
 
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              shape: BoxShape.circle,
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+                border: Border.all(color: colorScheme.outlineVariant, width: 2),
+              ),
+              child: Icon(
+                Icons.inbox_rounded,
+                color: colorScheme.onSurfaceVariant,
+                size: 56,
+              ),
             ),
-            child: Icon(
-              Icons.inbox_rounded,
-              color: colorScheme.onSurfaceVariant,
-              size: 64,
+            const SizedBox(height: 32),
+            Text(
+              'No cases to judge',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'No stories to judge',
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            const SizedBox(height: 12),
+            Text(
+              'The courtroom is empty.\nCheck back later for new cases.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Check back later for new content',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant.withAlpha(180),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -454,43 +549,55 @@ class _SwipeScreenState extends State<SwipeScreen> {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: AppTheme.nta.withAlpha(30),
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.nta.withAlpha(30),
+                    AppTheme.nta.withAlpha(10),
+                    Colors.transparent,
+                  ],
+                ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: AppTheme.nta.withAlpha(40),
-                    blurRadius: 20,
-                    spreadRadius: 4,
+                    blurRadius: 40,
+                    spreadRadius: 10,
                   ),
                 ],
               ),
-              child: Icon(
-                Icons.check_circle_outline_rounded,
-                color: AppTheme.nta,
-                size: 64,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.nta.withAlpha(100),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(Icons.check_rounded, color: AppTheme.nta, size: 48),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
             Text(
-              "You've judged all stories!",
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
+              'All cases judged!',
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
-              'Come back later for more',
+              'You\'ve reviewed all available cases.\nCome back later for more.',
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -510,7 +617,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
       });
 
       final direction = activity.direction;
-      
+
       // Play swipe sound if enabled
       final settings = context.read<SettingsProvider>();
       if (settings.soundEffectsEnabled) {
@@ -535,6 +642,16 @@ class _SwipeScreenState extends State<SwipeScreen> {
   Future<void> _handleVote(int storyIndex, bool isNta) async {
     final swipeProvider = context.read<SwipeProvider>();
     final statsProvider = context.read<StatsProvider>();
+    final settings = context.read<SettingsProvider>();
+
+    // Play vote sound effect if enabled
+    if (settings.soundEffectsEnabled) {
+      if (isNta) {
+        AudioService().playNtaSound();
+      } else {
+        AudioService().playYtaSound();
+      }
+    }
 
     // First trigger the swipe (shows result overlay)
     await swipeProvider.onSwipe(storyIndex, isNta);

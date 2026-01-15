@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
 /// Types of mascot reactions based on voting outcome.
 enum MascotReaction {
@@ -12,15 +14,20 @@ enum MascotReaction {
   surprised,
 }
 
-/// Animated judge mascot widget that reacts to voting results.
+/// Mascot widget with reaction expressions - performance optimized.
 ///
-/// Shows different expressions based on whether user agreed with majority.
+/// Design: Friendly judge mascot with simple entrance animation.
+/// No continuous animations for better performance.
 class JudgeMascot extends StatefulWidget {
   final MascotReaction reaction;
+  final double size;
+  final bool showMessage;
 
   const JudgeMascot({
     super.key,
     required this.reaction,
+    this.size = 100,
+    this.showMessage = true,
   });
 
   @override
@@ -29,57 +36,64 @@ class JudgeMascot extends StatefulWidget {
 
 class _JudgeMascotState extends State<JudgeMascot>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+  late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
-  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
+
+    // Single bounce entrance - no continuous animations
+    _bounceController = AnimationController(
       vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _bounceAnimation = CurvedAnimation(
+      parent: _bounceController,
+      curve: Curves.easeOutBack,
     );
 
-    _bounceAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.elasticOut,
-      ),
-    );
+    _bounceController.forward();
+  }
 
-    _scaleAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.2), weight: 40),
-      TweenSequenceItem(tween: Tween(begin: 1.2, end: 0.9), weight: 20),
-      TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.0), weight: 40),
-    ]).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOut,
-      ),
-    );
-
-    _controller.forward();
+  @override
+  void didUpdateWidget(JudgeMascot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reaction != widget.reaction) {
+      _bounceController.reset();
+      _bounceController.forward();
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _bounceController.dispose();
     super.dispose();
   }
 
-  String _getEmoji() {
+  Color get _accentColor {
     switch (widget.reaction) {
       case MascotReaction.happy:
-        return '🎉';
-      case MascotReaction.neutral:
-        return '🤔';
+        return AppTheme.nta;
       case MascotReaction.surprised:
-        return '😮';
+        return AppTheme.skip;
+      case MascotReaction.neutral:
+        return AppColors.gold;
     }
   }
 
-  String _getMessage() {
+  String get _emoji {
+    switch (widget.reaction) {
+      case MascotReaction.happy:
+        return '🎉';
+      case MascotReaction.surprised:
+        return '😮';
+      case MascotReaction.neutral:
+        return '🤔';
+    }
+  }
+
+  String get _message {
     switch (widget.reaction) {
       case MascotReaction.happy:
         return 'Great minds think alike!';
@@ -90,72 +104,150 @@ class _JudgeMascotState extends State<JudgeMascot>
     }
   }
 
-  Color _getGlowColor() {
-    switch (widget.reaction) {
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Main mascot container
+        ScaleTransition(
+          scale: _bounceAnimation,
+          child: Container(
+            width: widget.size,
+            height: widget.size,
+            decoration: BoxDecoration(
+              color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: _accentColor.withAlpha(150),
+                width: 3,
+              ),
+            ),
+            child: Stack(
+              children: [
+                // Main emoji
+                Center(
+                  child: Text(
+                    _emoji,
+                    style: TextStyle(fontSize: widget.size * 0.45),
+                  ),
+                ),
+
+                // Judge gavel badge
+                Positioned(
+                  bottom: widget.size * 0.05,
+                  right: widget.size * 0.05,
+                  child: Container(
+                    width: widget.size * 0.28,
+                    height: widget.size * 0.28,
+                    decoration: BoxDecoration(
+                      color: AppColors.gold,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.gavel_rounded,
+                      color: Colors.white,
+                      size: widget.size * 0.14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Message
+        if (widget.showMessage) ...[
+          const SizedBox(height: 12),
+          FadeTransition(
+            opacity: _bounceAnimation,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: _accentColor.withAlpha(20),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                _message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Mini mascot for inline use - simplified
+class MiniJudgeMascot extends StatelessWidget {
+  final MascotReaction reaction;
+  final double size;
+
+  const MiniJudgeMascot({
+    super.key,
+    required this.reaction,
+    this.size = 40,
+  });
+
+  String get _emoji {
+    switch (reaction) {
       case MascotReaction.happy:
-        return Colors.green;
-      case MascotReaction.neutral:
-        return Colors.orange;
+        return '🎉';
       case MascotReaction.surprised:
-        return Colors.purple;
+        return '😮';
+      case MascotReaction.neutral:
+        return '🤔';
+    }
+  }
+
+  Color get _borderColor {
+    switch (reaction) {
+      case MascotReaction.happy:
+        return AppTheme.nta;
+      case MascotReaction.surprised:
+        return AppTheme.skip;
+      case MascotReaction.neutral:
+        return AppColors.gold;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Emoji with animation
-            Transform.scale(
-              scale: _scaleAnimation.value,
-              child: Transform.translate(
-                offset: Offset(
-                  0,
-                  -10 * (1 - _bounceAnimation.value),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: _getGlowColor().withAlpha(60),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    _getEmoji(),
-                    style: const TextStyle(fontSize: 48),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Message with fade in
-            Opacity(
-              opacity: _bounceAnimation.value.clamp(0.0, 1.0),
-              child: Text(
-                _getMessage(),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: isDark
-                      ? Colors.white.withAlpha(180)
-                      : theme.colorScheme.onSurface.withAlpha(180),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: _borderColor.withAlpha(120),
+          width: 1.5,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          _emoji,
+          style: TextStyle(fontSize: size * 0.5),
+        ),
+      ),
     );
   }
 }

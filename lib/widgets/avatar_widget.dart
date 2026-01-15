@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
-/// Animated avatar widget that displays different reactions.
-/// 
-/// Uses Flutter animations for smooth character reactions.
-/// Supports three avatar types: classic (emoji), boy, and girl.
+/// Animated avatar widget with multiple types and reactions.
+///
+/// Design: Expressive character with entrance animation only.
+/// Supports classic (emoji), boy, and girl avatar types.
+/// Performance optimized - no continuous animations.
 class AvatarWidget extends StatefulWidget {
-  /// Reaction type: 'happy', 'sad', 'neutral'
-  final String reaction;
-  
-  /// Size of the avatar
+  final String reaction; // 'happy', 'sad', 'neutral'
   final double size;
-  
-  /// Whether to play the animation
-  final bool animate;
+  final AvatarType? overrideType;
+  final bool showGlow;
 
   const AvatarWidget({
     super.key,
     required this.reaction,
-    this.size = 100,
-    this.animate = true,
+    this.size = 80,
+    this.overrideType,
+    this.showGlow = false, // Disabled by default for performance
   });
 
   @override
@@ -28,454 +28,417 @@ class AvatarWidget extends StatefulWidget {
 }
 
 class _AvatarWidgetState extends State<AvatarWidget>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late AnimationController _bounceController;
-  late AnimationController _pulseController;
   late Animation<double> _bounceAnimation;
-  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    
+
+    // Single bounce entrance animation - no continuous animations
     _bounceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 500),
     );
-    
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
+    _bounceAnimation = CurvedAnimation(
+      parent: _bounceController,
+      curve: Curves.easeOutBack,
     );
-    
-    _bounceAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _bounceController, curve: Curves.elasticOut),
-    );
-    
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-    
-    if (widget.animate) {
+
+    _bounceController.forward();
+  }
+
+  @override
+  void didUpdateWidget(AvatarWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reaction != widget.reaction) {
+      _bounceController.reset();
       _bounceController.forward();
-      _pulseController.repeat(reverse: true);
     }
   }
 
   @override
   void dispose() {
     _bounceController.dispose();
-    _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, _) {
-        return AnimatedBuilder(
-          animation: Listenable.merge([_bounceAnimation, _pulseAnimation]),
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _bounceAnimation.value * _pulseAnimation.value,
-              child: _buildAvatar(settings.avatarType),
-            );
-          },
-        );
-      },
+    final avatarType = widget.overrideType ??
+        context.select<SettingsProvider, AvatarType>((p) => p.avatarType);
+
+    return ScaleTransition(
+      scale: _bounceAnimation,
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: _buildAvatar(avatarType),
+      ),
     );
   }
 
   Widget _buildAvatar(AvatarType type) {
     switch (type) {
-      case AvatarType.boy:
-        return _BoyAvatar(reaction: widget.reaction, size: widget.size);
-      case AvatarType.girl:
-        return _GirlAvatar(reaction: widget.reaction, size: widget.size);
       case AvatarType.classic:
-        return _ClassicAvatar(reaction: widget.reaction, size: widget.size);
+        return _ClassicAvatar(
+          reaction: widget.reaction,
+          size: widget.size,
+        );
+      case AvatarType.boy:
+        return _CharacterAvatar(
+          reaction: widget.reaction,
+          size: widget.size,
+          isBoy: true,
+        );
+      case AvatarType.girl:
+        return _CharacterAvatar(
+          reaction: widget.reaction,
+          size: widget.size,
+          isBoy: false,
+        );
     }
   }
 }
 
-/// Classic emoji-based avatar
+/// Classic emoji-based avatar - performance optimized
 class _ClassicAvatar extends StatelessWidget {
   final String reaction;
   final double size;
 
   const _ClassicAvatar({required this.reaction, required this.size});
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      _getEmoji(),
-      style: TextStyle(fontSize: size * 0.8),
-    );
-  }
-
-  String _getEmoji() {
+  String get _emoji {
     switch (reaction) {
       case 'happy':
-        return '🎉';
+        return '😄';
       case 'sad':
-        return '😮';
+        return '😢';
       case 'neutral':
       default:
         return '🤔';
     }
   }
-}
 
-/// Animated boy character avatar
-class _BoyAvatar extends StatelessWidget {
-  final String reaction;
-  final double size;
-
-  const _BoyAvatar({required this.reaction, required this.size});
+  Color get _borderColor {
+    switch (reaction) {
+      case 'happy':
+        return AppTheme.nta;
+      case 'sad':
+        return AppTheme.yta;
+      case 'neutral':
+      default:
+        return AppColors.gold;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.blue.shade300,
-            Colors.blue.shade600,
-          ],
+        color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
+        border: Border.all(
+          color: _borderColor.withAlpha(150),
+          width: 2.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withAlpha(100),
-            blurRadius: 20,
-            spreadRadius: 5,
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Face
-          Positioned(
-            top: size * 0.25,
-            child: _buildFace(),
-          ),
-          // Hair
-          Positioned(
-            top: size * 0.1,
-            child: _buildHair(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFace() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Eyes
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildEye(),
-            SizedBox(width: size * 0.15),
-            _buildEye(),
-          ],
-        ),
-        SizedBox(height: size * 0.08),
-        // Mouth
-        _buildMouth(),
-      ],
-    );
-  }
-
-  Widget _buildEye() {
-    final eyeSize = size * 0.12;
-    return Container(
-      width: eyeSize,
-      height: eyeSize,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
       ),
       child: Center(
-        child: Container(
-          width: eyeSize * 0.5,
-          height: eyeSize * 0.5,
-          decoration: const BoxDecoration(
-            color: Colors.black87,
-            shape: BoxShape.circle,
-          ),
+        child: Text(
+          _emoji,
+          style: TextStyle(fontSize: size * 0.5),
         ),
       ),
     );
   }
+}
 
-  Widget _buildMouth() {
-    final mouthWidth = size * 0.25;
-    final mouthHeight = size * 0.12;
-    
+/// Character-based avatar - performance optimized
+class _CharacterAvatar extends StatelessWidget {
+  final String reaction;
+  final double size;
+  final bool isBoy;
+
+  const _CharacterAvatar({
+    required this.reaction,
+    required this.size,
+    required this.isBoy,
+  });
+
+  Color get _skinColor => isBoy
+      ? const Color(0xFFFFDBC4)
+      : const Color(0xFFFFE4D6);
+
+  Color get _hairColor => isBoy
+      ? const Color(0xFF3D2914)
+      : const Color(0xFF5D3A1A);
+
+  Color get _borderColor {
+    switch (reaction) {
+      case 'happy':
+        return AppTheme.nta;
+      case 'sad':
+        return AppTheme.yta;
+      case 'neutral':
+      default:
+        return AppColors.gold;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isDark ? colorScheme.surfaceContainerHigh : Colors.white,
+        border: Border.all(
+          color: _borderColor.withAlpha(150),
+          width: 2.5,
+        ),
+      ),
+      child: ClipOval(
+        child: Stack(
+          children: [
+            // Face base
+            Center(
+              child: Container(
+                width: size * 0.6,
+                height: size * 0.6,
+                decoration: BoxDecoration(
+                  color: _skinColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+
+            // Hair
+            Positioned(
+              top: size * 0.12,
+              left: size * 0.18,
+              right: size * 0.18,
+              child: Container(
+                height: size * 0.26,
+                decoration: BoxDecoration(
+                  color: _hairColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(size * 0.2),
+                    topRight: Radius.circular(size * 0.2),
+                  ),
+                ),
+              ),
+            ),
+
+            // Girl extras
+            if (!isBoy) ...[
+              Positioned(
+                top: size * 0.28,
+                left: size * 0.12,
+                child: Container(
+                  width: size * 0.08,
+                  height: size * 0.28,
+                  decoration: BoxDecoration(
+                    color: _hairColor,
+                    borderRadius: BorderRadius.circular(size * 0.04),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: size * 0.28,
+                right: size * 0.12,
+                child: Container(
+                  width: size * 0.08,
+                  height: size * 0.28,
+                  decoration: BoxDecoration(
+                    color: _hairColor,
+                    borderRadius: BorderRadius.circular(size * 0.04),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: size * 0.1,
+                right: size * 0.24,
+                child: Container(
+                  width: size * 0.1,
+                  height: size * 0.06,
+                  decoration: BoxDecoration(
+                    color: AppColors.gold,
+                    borderRadius: BorderRadius.circular(size * 0.03),
+                  ),
+                ),
+              ),
+            ],
+
+            // Eyes
+            Positioned(
+              top: size * 0.38,
+              left: size * 0.3,
+              child: _Eye(size: size * 0.1, reaction: reaction),
+            ),
+            Positioned(
+              top: size * 0.38,
+              right: size * 0.3,
+              child: _Eye(size: size * 0.1, reaction: reaction),
+            ),
+
+            // Mouth
+            Positioned(
+              bottom: size * 0.25,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _Mouth(size: size * 0.2, reaction: reaction),
+              ),
+            ),
+
+            // Blush for happy
+            if (reaction == 'happy') ...[
+              Positioned(
+                top: size * 0.48,
+                left: size * 0.2,
+                child: Container(
+                  width: size * 0.07,
+                  height: size * 0.035,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF9999).withAlpha(70),
+                    borderRadius: BorderRadius.circular(size * 0.02),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: size * 0.48,
+                right: size * 0.2,
+                child: Container(
+                  width: size * 0.07,
+                  height: size * 0.035,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF9999).withAlpha(70),
+                    borderRadius: BorderRadius.circular(size * 0.02),
+                  ),
+                ),
+              ),
+            ],
+
+            // Tear for sad
+            if (reaction == 'sad')
+              Positioned(
+                top: size * 0.5,
+                left: size * 0.33,
+                child: Container(
+                  width: size * 0.035,
+                  height: size * 0.05,
+                  decoration: BoxDecoration(
+                    color: Colors.lightBlue.withAlpha(140),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(size * 0.015),
+                      bottom: Radius.circular(size * 0.025),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Eye component - simplified
+class _Eye extends StatelessWidget {
+  final double size;
+  final String reaction;
+
+  const _Eye({required this.size, required this.reaction});
+
+  @override
+  Widget build(BuildContext context) {
+    final isSad = reaction == 'sad';
+
+    return Container(
+      width: size,
+      height: isSad ? size * 0.4 : size,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: isSad
+            ? BorderRadius.vertical(bottom: Radius.circular(size * 0.5))
+            : BorderRadius.circular(size * 0.5),
+      ),
+      child: !isSad
+          ? Align(
+              alignment: const Alignment(0.3, -0.3),
+              child: Container(
+                width: size * 0.25,
+                height: size * 0.25,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+/// Mouth component - simplified
+class _Mouth extends StatelessWidget {
+  final double size;
+  final String reaction;
+
+  const _Mouth({required this.size, required this.reaction});
+
+  @override
+  Widget build(BuildContext context) {
     switch (reaction) {
       case 'happy':
         return Container(
-          width: mouthWidth,
-          height: mouthHeight,
+          width: size,
+          height: size * 0.45,
           decoration: BoxDecoration(
-            color: Colors.pink.shade300,
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(mouthHeight),
-              bottomRight: Radius.circular(mouthHeight),
+            color: const Color(0xFFE87B6D),
+            borderRadius: BorderRadius.vertical(
+              bottom: Radius.circular(size * 0.4),
             ),
           ),
         );
+
       case 'sad':
         return Container(
-          width: mouthWidth,
-          height: mouthHeight * 0.5,
+          width: size * 0.8,
+          height: size * 0.25,
           decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: Colors.pink.shade300, width: 3),
+              bottom: BorderSide(
+                color: const Color(0xFFD4645A),
+                width: 3,
+              ),
             ),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(mouthHeight),
-              topRight: Radius.circular(mouthHeight),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(size * 0.4),
             ),
           ),
         );
+
+      case 'neutral':
       default:
         return Container(
-          width: mouthWidth * 0.6,
+          width: size * 0.5,
           height: 3,
           decoration: BoxDecoration(
-            color: Colors.pink.shade300,
+            color: const Color(0xFFD4645A),
             borderRadius: BorderRadius.circular(2),
           ),
         );
     }
-  }
-
-  Widget _buildHair() {
-    return Container(
-      width: size * 0.5,
-      height: size * 0.2,
-      decoration: BoxDecoration(
-        color: Colors.brown.shade700,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(size * 0.25),
-          topRight: Radius.circular(size * 0.25),
-        ),
-      ),
-    );
-  }
-}
-
-/// Animated girl character avatar
-class _GirlAvatar extends StatelessWidget {
-  final String reaction;
-  final double size;
-
-  const _GirlAvatar({required this.reaction, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.pink.shade200,
-            Colors.pink.shade400,
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.pink.withAlpha(100),
-            blurRadius: 20,
-            spreadRadius: 5,
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Face
-          Positioned(
-            top: size * 0.28,
-            child: _buildFace(),
-          ),
-          // Hair with bows
-          Positioned(
-            top: size * 0.05,
-            left: size * 0.1,
-            child: _buildBow(),
-          ),
-          Positioned(
-            top: size * 0.05,
-            right: size * 0.1,
-            child: _buildBow(),
-          ),
-          // Bangs
-          Positioned(
-            top: size * 0.12,
-            child: _buildBangs(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFace() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Eyes with lashes
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildEye(),
-            SizedBox(width: size * 0.12),
-            _buildEye(),
-          ],
-        ),
-        SizedBox(height: size * 0.02),
-        // Blush
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildBlush(),
-            SizedBox(width: size * 0.2),
-            _buildBlush(),
-          ],
-        ),
-        SizedBox(height: size * 0.03),
-        // Mouth
-        _buildMouth(),
-      ],
-    );
-  }
-
-  Widget _buildEye() {
-    final eyeSize = size * 0.11;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Lashes
-        Container(
-          width: eyeSize * 1.2,
-          height: 2,
-          decoration: BoxDecoration(
-            color: Colors.black87,
-            borderRadius: BorderRadius.circular(1),
-          ),
-        ),
-        const SizedBox(height: 1),
-        Container(
-          width: eyeSize,
-          height: eyeSize,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Container(
-              width: eyeSize * 0.5,
-              height: eyeSize * 0.5,
-              decoration: BoxDecoration(
-                color: Colors.purple.shade700,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBlush() {
-    return Container(
-      width: size * 0.08,
-      height: size * 0.04,
-      decoration: BoxDecoration(
-        color: Colors.pink.shade200.withAlpha(150),
-        borderRadius: BorderRadius.circular(size * 0.02),
-      ),
-    );
-  }
-
-  Widget _buildMouth() {
-    final mouthWidth = size * 0.2;
-    final mouthHeight = size * 0.1;
-    
-    switch (reaction) {
-      case 'happy':
-        return Container(
-          width: mouthWidth,
-          height: mouthHeight,
-          decoration: BoxDecoration(
-            color: Colors.red.shade300,
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(mouthHeight),
-              bottomRight: Radius.circular(mouthHeight),
-            ),
-          ),
-        );
-      case 'sad':
-        return Container(
-          width: mouthWidth * 0.8,
-          height: mouthHeight * 0.5,
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: Colors.red.shade300, width: 2),
-            ),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(mouthHeight),
-              topRight: Radius.circular(mouthHeight),
-            ),
-          ),
-        );
-      default:
-        return Container(
-          width: mouthWidth * 0.5,
-          height: 2,
-          decoration: BoxDecoration(
-            color: Colors.red.shade300,
-            borderRadius: BorderRadius.circular(1),
-          ),
-        );
-    }
-  }
-
-  Widget _buildBow() {
-    return Container(
-      width: size * 0.12,
-      height: size * 0.08,
-      decoration: BoxDecoration(
-        color: Colors.red.shade400,
-        borderRadius: BorderRadius.circular(size * 0.02),
-      ),
-    );
-  }
-
-  Widget _buildBangs() {
-    return Container(
-      width: size * 0.4,
-      height: size * 0.12,
-      decoration: BoxDecoration(
-        color: Colors.brown.shade600,
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(size * 0.1),
-          bottomRight: Radius.circular(size * 0.1),
-        ),
-      ),
-    );
   }
 }
